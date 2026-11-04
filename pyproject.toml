@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tuberino-downloader"
+version = "0.8.0"
+description = "Open-source Windows desktop downloader for YouTube, Twitch, Twitter/X and Instagram media"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "yt-dlp[default]",
+    "PySide6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+tuberino-downloader = "app.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["delete/tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
