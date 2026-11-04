@@ -1,6 +1,6 @@
 # Tuberino Downloader
 
-![Version](https://img.shields.io/badge/version-v0.8.2-1769aa)
+![Version](https://img.shields.io/badge/version-v0.8.3-1769aa)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-0078d4)
 ![License](https://img.shields.io/badge/license-MIT-2ea44f)
 
@@ -132,7 +132,7 @@ To build the updater assets from a prepared Windows distribution:
 ```powershell
 python scripts/build_update.py `
   --source path\to\prepared-distribution `
-  --version 0.8.2 `
+  --version 0.8.3 `
   --output releases
 ```
 
@@ -145,7 +145,7 @@ build environment and run:
 
 ```powershell
 python -m pip install pyinstaller
-.\scripts\build_windows.ps1 -Version 0.8.2
+.\scripts\build_windows.ps1 -Version 0.8.3
 ```
 
 The script accepts `-BuildPython` when the build interpreter is different from
@@ -154,7 +154,7 @@ PyInstaller/PySide6 builds on Windows:
 
 ```powershell
 .\scripts\build_windows.ps1 `
-  -Version 0.8.2 `
+  -Version 0.8.3 `
   -BuildPython C:\path\to\python312\python.exe
 ```
 
