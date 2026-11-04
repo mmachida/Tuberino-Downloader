@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 
 from app.updates.config import APP_EXECUTABLE_NAME, UpdateConfig
@@ -56,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         finalize_transaction(transaction)
         return 0
     except (InstallError, OSError, ValueError):
+        _log_install_failure(Path(args.install_root))
         return 1
     finally:
         shutil.rmtree(Path(args.cleanup_root), ignore_errors=True)
@@ -148,6 +150,20 @@ def _schedule_delegated_cleanup() -> None:
         return
     try:
         shutil.rmtree(temporary_root, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def _log_install_failure(install_root: Path) -> None:
+    """Registra somente uma mensagem genérica quando a instalação falha."""
+
+    try:
+        log_path = install_root / "logs" / "log.txt"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f"{datetime.now():%d/%m/%Y - %H:%M} - A atualização não pôde ser instalada.\n"
+            )
     except OSError:
         pass
 

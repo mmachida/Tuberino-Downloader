@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -16,6 +17,10 @@ from .service import UpdateError, UpdateService
 
 class InstallError(UpdateError):
     """Erro seguro da fase de substituição local."""
+
+
+_REPLACE_RETRY_SECONDS = 30.0
+_REPLACE_RETRY_DELAY_SECONDS = 0.25
 
 
 @dataclass(slots=True)
@@ -67,7 +72,7 @@ def install_archive(
                 temporary_target = target.with_name(f".{target.name}.{uuid.uuid4().hex}.update")
                 try:
                     shutil.copy2(staged, temporary_target)
-                    os.replace(temporary_target, target)
+                    _replace_with_retry(temporary_target, target)
                 finally:
                     temporary_target.unlink(missing_ok=True)
                 installed.append(relative)
@@ -114,6 +119,20 @@ def _safe_target(root: Path, relative: str) -> Path:
     if target != root and root not in target.parents:
         raise InstallError("O pacote aponta para fora da pasta de instalação.")
     return target
+
+
+def _replace_with_retry(source: Path, target: Path) -> None:
+    """Substitui um arquivo, aguardando o desbloqueio do processo anterior no Windows."""
+
+    deadline = time.monotonic() + _REPLACE_RETRY_SECONDS
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_SECONDS)
 
 
 def _rollback_files(

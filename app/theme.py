@@ -107,7 +107,7 @@ class Theme:
                 padding: 0 4px;
                 background-color: {self.panel};
             }}
-            QLineEdit, QComboBox, QSpinBox {{
+            QLineEdit, QComboBox, QSpinBox, QTextEdit {{
                 background-color: {self.field};
                 color: {self.text};
                 border: 1px solid {self.border};
@@ -116,7 +116,7 @@ class Theme:
                 selection-background-color: {self.accent};
                 selection-color: #ffffff;
             }}
-            QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus {{
                 border: 1px solid {self.accent};
             }}
             QComboBox QAbstractItemView {{

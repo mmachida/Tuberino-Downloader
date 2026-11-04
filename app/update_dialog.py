@@ -75,11 +75,9 @@ class UpdateDialog(QDialog):
         buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addStretch()
         self.download_button = QPushButton()
-        self.download_button.setFixedWidth(120)
         self.download_button.setVisible(False)
         self.download_button.clicked.connect(self.download_requested.emit)
         self.close_button = QPushButton()
-        self.close_button.setFixedWidth(144)
         self.close_button.clicked.connect(self.close)
         buttons.addWidget(self.download_button)
         buttons.addWidget(self.close_button)
@@ -153,3 +151,10 @@ class UpdateDialog(QDialog):
         self.notes_title.setText(self._translator.text("update_changelog"))
         self.download_button.setText(self._translator.text("update_download_install"))
         self.close_button.setText(self._translator.text("close"))
+        button_width = max(
+            150,
+            self.download_button.sizeHint().width(),
+            self.close_button.sizeHint().width(),
+        )
+        self.download_button.setFixedWidth(button_width)
+        self.close_button.setFixedWidth(button_width)
