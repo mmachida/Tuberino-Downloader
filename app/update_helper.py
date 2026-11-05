@@ -58,7 +58,12 @@ def main(argv: list[str] | None = None) -> int:
             command = _launch_command(Path(args.install_root), args.launch_mode)
             environment = os.environ.copy()
             environment[CONFIRMATION_ENV] = str(transaction.state_path)
-            process = _start_hidden(command, Path(args.install_root), env=environment)
+            process = _start_hidden(
+                command,
+                Path(args.install_root),
+                env=environment,
+                show_window=True,
+            )
         except (OSError, ValueError):
             rollback_transaction(transaction)
             transaction = None
@@ -160,19 +165,23 @@ def _launch_command(install_root: Path, mode: str) -> list[str]:
 
 
 def _start_hidden(
-    command: list[str], cwd: Path, *, env: dict[str, str] | None = None
+    command: list[str],
+    cwd: Path,
+    *,
+    env: dict[str, str] | None = None,
+    show_window: bool = False,
 ) -> subprocess.Popen:
     flags = 0
     startupinfo = None
     if os.name == "nt":
         flags = (
-            getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
         )
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = 0
+        if not show_window:
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0
     return subprocess.Popen(
         command,
         cwd=str(cwd),
@@ -203,6 +212,7 @@ def _restart_application(args: argparse.Namespace, parent_exited: bool) -> None:
         _start_hidden(
             _launch_command(Path(args.install_root), args.launch_mode),
             Path(args.install_root),
+            show_window=True,
         )
     except OSError:
         pass
