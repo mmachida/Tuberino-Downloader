@@ -452,13 +452,13 @@ class UpdateService:
     def _is_user_path(relative: str) -> bool:
         parts = PurePosixPath(relative).parts
         first = parts[0].casefold() if parts else ""
-        return first in {
-            "output",
-            "temp",
-            "logs",
-            "delete",
-            ".venv",
-        } or relative.casefold().endswith((".log", ".log.txt"))
+        name = PurePosixPath(relative).name.casefold()
+        return (
+            first in {"output", "temp", "logs", "delete", ".venv"}
+            or name in {".tuberino-update-state.json"}
+            or first == ".tuberino-update-backups"
+            or relative.casefold().endswith((".log", ".log.txt"))
+        )
 
     @staticmethod
     def _ensure_https(url: str) -> None:

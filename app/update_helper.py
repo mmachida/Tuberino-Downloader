@@ -14,14 +14,17 @@ from pathlib import Path
 
 from app.updates.config import APP_EXECUTABLE_NAME, UpdateConfig
 from app.updates.installer import (
+    CONFIRMATION_ENV,
     InstallError,
     finalize_transaction,
     install_archive,
+    read_state,
     rollback_transaction,
 )
 
 _DELEGATED_ENV = "TUBERINO_UPDATE_HELPER_CHILD"
 _DELEGATED_ROOT_ENV = "TUBERINO_UPDATE_HELPER_ROOT"
+_CONFIRMATION_TIMEOUT_SECONDS = 45.0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,8 +41,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cleanup-root", required=True)
     args = parser.parse_args(argv)
 
+    transaction = None
+    parent_exited = False
     try:
         _wait_for_process(args.parent_pid)
+        parent_exited = True
         config = UpdateConfig(package_id=args.package_id)
         transaction = install_archive(
             args.archive,
@@ -50,13 +56,30 @@ def main(argv: list[str] | None = None) -> int:
         )
         try:
             command = _launch_command(Path(args.install_root), args.launch_mode)
-            _start_hidden(command, Path(args.install_root))
+            environment = os.environ.copy()
+            environment[CONFIRMATION_ENV] = str(transaction.state_path)
+            process = _start_hidden(command, Path(args.install_root), env=environment)
         except (OSError, ValueError):
             rollback_transaction(transaction)
+            transaction = None
+            _restart_application(args, parent_exited)
             return 4
+        if not _wait_for_confirmation(transaction.state_path):
+            _terminate_process(process)
+            rollback_transaction(transaction)
+            transaction = None
+            _restart_application(args, parent_exited)
+            return 3
         finalize_transaction(transaction)
+        transaction = None
         return 0
     except (InstallError, OSError, ValueError):
+        if transaction is not None:
+            try:
+                rollback_transaction(transaction)
+            except OSError:
+                pass
+        _restart_application(args, parent_exited)
         _log_install_failure(Path(args.install_root))
         return 1
     finally:
@@ -65,12 +88,45 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _wait_for_process(pid: int, timeout_seconds: float = 120.0) -> None:
+    """Aguarda exatamente o processo pai, sem confundir outro processo com ele."""
+
+    if pid <= 0:
+        return
+    if os.name == "nt":
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, pid)
+        if not handle:
+            return
+        try:
+            result = ctypes.windll.kernel32.WaitForSingleObject(
+                handle,
+                int(timeout_seconds * 1000),
+            )
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+        if result == 0:
+            return
+        raise OSError("O aplicativo anterior não encerrou dentro do tempo esperado.")
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if not _process_is_running(pid):
             return
-        time.sleep(0.25)
+        time.sleep(0.1)
     raise OSError("O aplicativo anterior não encerrou dentro do tempo esperado.")
+
+
+def _wait_for_confirmation(
+    state_path: Path,
+    timeout_seconds: float = _CONFIRMATION_TIMEOUT_SECONDS,
+) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        state = read_state(state_path)
+        if state and state.get("status") == "confirmed":
+            return True
+        time.sleep(0.2)
+    return False
 
 
 def _process_is_running(pid: int) -> bool:
@@ -103,7 +159,9 @@ def _launch_command(install_root: Path, mode: str) -> list[str]:
     return [str(executable), "-m", "app"]
 
 
-def _start_hidden(command: list[str], cwd: Path, *, env: dict[str, str] | None = None) -> None:
+def _start_hidden(
+    command: list[str], cwd: Path, *, env: dict[str, str] | None = None
+) -> subprocess.Popen:
     flags = 0
     startupinfo = None
     if os.name == "nt":
@@ -115,7 +173,7 @@ def _start_hidden(command: list[str], cwd: Path, *, env: dict[str, str] | None =
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = 0
-    subprocess.Popen(
+    return subprocess.Popen(
         command,
         cwd=str(cwd),
         env=env,
@@ -123,6 +181,31 @@ def _start_hidden(command: list[str], cwd: Path, *, env: dict[str, str] | None =
         creationflags=flags,
         startupinfo=startupinfo,
     )
+
+
+def _terminate_process(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+
+def _restart_application(args: argparse.Namespace, parent_exited: bool) -> None:
+    if not parent_exited:
+        return
+    try:
+        _start_hidden(
+            _launch_command(Path(args.install_root), args.launch_mode),
+            Path(args.install_root),
+        )
+    except OSError:
+        pass
 
 
 def _delegate_frozen_helper() -> bool:

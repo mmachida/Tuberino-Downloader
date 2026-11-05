@@ -437,6 +437,20 @@ _TEXT: dict[str, dict[str, str]] = {
         "pt-BR": "Não foi possível iniciar o instalador auxiliar. O aplicativo continuará aberto.",
         "en-US": "The helper updater could not be started. The application will remain open.",
     },
+    "update_preflight_failed": {
+        "pt-BR": (
+            "Não foi possível preparar a pasta do aplicativo para a atualização. "
+            "O aplicativo continuará aberto."
+        ),
+        "en-US": (
+            "The application folder could not be prepared for the update. "
+            "The application will remain open."
+        ),
+    },
+    "update_helper_missing": {
+        "pt-BR": "O instalador auxiliar não foi encontrado. O aplicativo continuará aberto.",
+        "en-US": "The helper updater was not found. The application will remain open.",
+    },
     "item": {"pt-BR": "item", "en-US": "item"},
     "items": {"pt-BR": "itens", "en-US": "items"},
     "none": {"pt-BR": "nenhum", "en-US": "none"},

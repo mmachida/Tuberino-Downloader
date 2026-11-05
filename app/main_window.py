@@ -80,6 +80,7 @@ from app.theme import theme_for
 from app.ui_controls import StyledComboBox
 from app.update_dialog import UpdateDialog
 from app.updates.config import UPDATER_EXECUTABLE_NAME, UpdateConfig
+from app.updates.installer import InstallError, check_install_prerequisites
 from app.updates.service import PreparedUpdate, ReleaseInfo, UpdateService
 from app.version import APP_VERSION
 from app.workers import (
@@ -2068,6 +2069,24 @@ class MainWindow(QMainWindow):
         install_root = (
             Path(sys.executable).resolve().parent if frozen else self._project_root.resolve()
         )
+        if frozen and not (install_root / UPDATER_EXECUTABLE_NAME).is_file():
+            self._app_logger.error("O instalador auxiliar da atualização não foi encontrado.")
+            QMessageBox.warning(
+                self,
+                self._t("update_install_title"),
+                self._t("update_helper_missing"),
+            )
+            return
+        try:
+            check_install_prerequisites(prepared.archive_path, install_root)
+        except (InstallError, OSError):
+            self._app_logger.error("Não foi possível preparar a pasta para atualização.")
+            QMessageBox.warning(
+                self,
+                self._t("update_install_title"),
+                self._t("update_preflight_failed"),
+            )
+            return
         helper_args = [
             "--archive",
             str(prepared.archive_path),
