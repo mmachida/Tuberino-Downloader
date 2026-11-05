@@ -32,6 +32,9 @@ def main() -> None:
         application.setWindowIcon(QIcon(str(icon_path)))
     window = MainWindow()
     window.show()
+    window.showNormal()
+    window.raise_()
+    window.activateWindow()
     try:
         confirm_pending_startup()
     except OSError:
