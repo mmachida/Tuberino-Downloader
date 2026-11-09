@@ -61,7 +61,10 @@ from app.services.format_selector import (
     build_playlist_audio_plan,
     build_playlist_video_plan,
     build_video_plan,
+    choose_original_audio,
+    has_multiple_audio_languages,
     is_mp4_compatible_choice,
+    is_original_audio_option,
 )
 from app.services.output_validator import OutputValidator
 from app.services.url_validator import (
@@ -835,7 +838,9 @@ class MainWindow(QMainWindow):
         for index in range(self.quality_combo.count()):
             option = self.quality_combo.itemData(index)
             if isinstance(option, FormatOption):
-                self.quality_combo.setItemText(index, self._quality_option_label(option))
+                self.quality_combo.setItemText(
+                    index, self._quality_option_label(option, self._video_info)
+                )
         self.profile_label.setText(self._t("container"))
         self.profile_combo.setToolTip(self._t("mp4_tooltip"))
         self._populate_profile_combo(self._current_source_kind())
@@ -878,12 +883,17 @@ class MainWindow(QMainWindow):
             len(self._content.items),
         )
 
-    def _quality_option_label(self, option: FormatOption) -> str:
+    def _quality_option_label(
+        self, option: FormatOption, video_info: VideoInfo | None = None
+    ) -> str:
         label = (
             self._translator.message(option.label) if option.label else self._t("video_available")
         )
         format_label = (option.ext or self._t("unknown_format")).upper()
-        return f"{label} • {format_label}"
+        original_audio = choose_original_audio(video_info) if video_info is not None else None
+        language = _compact_language_code(original_audio.language) if original_audio else None
+        suffix = f" • Original {language}" if language else ""
+        return f"{label} • {format_label}{suffix}"
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
@@ -1118,8 +1128,16 @@ class MainWindow(QMainWindow):
         candidates = selected_items or tuple(item for item in items if item.available)
         source_item = next((item for item in candidates if item.formats), None)
         if source_item is not None:
-            for option in source_item.as_video_info().video_options:
-                self.quality_combo.addItem(self._quality_option_label(option), option)
+            source_info = source_item.as_video_info()
+            options = source_info.video_options
+            if has_multiple_audio_languages(source_info):
+                options = tuple(
+                    option
+                    for option in options
+                    if not option.has_audio or is_original_audio_option(option)
+                )
+            for option in options:
+                self.quality_combo.addItem(self._quality_option_label(option, source_info), option)
         if isinstance(previous, FormatOption):
             for index in range(self.quality_combo.count()):
                 candidate = self.quality_combo.itemData(index)
@@ -2386,3 +2404,12 @@ def _thread_is_finished(thread: QThread) -> bool:
         return thread.isFinished()
     except RuntimeError:
         return True
+
+
+def _compact_language_code(language: str | None) -> str | None:
+    if not language:
+        return None
+    value = language.strip().replace("_", "-")
+    if not value or value.casefold() in {"und", "unknown"}:
+        return None
+    return value.split("-", 1)[0].upper()[:4]

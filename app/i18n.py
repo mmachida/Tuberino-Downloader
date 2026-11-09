@@ -582,6 +582,13 @@ _MESSAGE_TRANSLATIONS = {
     "Nenhuma faixa de áudio compatível foi disponibilizada.": (
         "No compatible audio track was available."
     ),
+    (
+        "Não foi possível identificar a faixa de áudio original. "
+        "O download foi interrompido para evitar usar uma dublagem."
+    ): (
+        "The original audio track could not be identified. "
+        "The download was stopped to avoid using a dubbed track."
+    ),
     "Playlists oferecem apenas Formato original ou Converter para MP4.": (
         "Playlists only offer Original format or Convert to MP4."
     ),

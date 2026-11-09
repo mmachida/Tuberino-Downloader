@@ -28,13 +28,35 @@ def is_mp4_compatible_choice(video_info: VideoInfo, choice: FormatOption | str) 
         selected = _resolve_choice(video_info, choice)
     except FormatPlanningError:
         return False
+    if (
+        selected.stream_kind is StreamKind.VIDEO_AUDIO
+        and _has_multiple_audio_languages(video_info)
+        and not _is_original_audio(selected)
+    ):
+        return False
     if _is_mp4_compatible(selected):
         return True
     if selected.stream_kind is StreamKind.VIDEO_AUDIO:
         return False
-    return _is_video_mp4_compatible(selected) and any(
-        _is_aac_audio(option) for option in video_info.audio_options
-    )
+    audio = _choose_audio(video_info, prefer_mp4=True)
+    return _is_video_mp4_compatible(selected) and audio is not None and _is_aac_audio(audio)
+
+
+def choose_original_audio(
+    video_info: VideoInfo, *, prefer_mp4: bool = False
+) -> FormatOption | None:
+    """Retorna a faixa original identificada pelo extrator."""
+    return _choose_audio(video_info, prefer_mp4=prefer_mp4)
+
+
+def has_multiple_audio_languages(video_info: VideoInfo) -> bool:
+    """Indica se os metadados possuem mais de um idioma de áudio."""
+    return _has_multiple_audio_languages(video_info)
+
+
+def is_original_audio_option(option: FormatOption) -> bool:
+    """Indica se um formato de áudio foi marcado como original pelo extrator."""
+    return _is_original_audio(option)
 
 
 def normalize_formats(raw_formats: Iterable[dict[str, Any]]) -> tuple[FormatOption, ...]:
@@ -65,6 +87,12 @@ def build_video_plan(
     selected = _resolve_choice(video_info, choice)
     if not selected.has_video:
         raise FormatPlanningError("A qualidade escolhida não contém vídeo.")
+    if (
+        selected.stream_kind is StreamKind.VIDEO_AUDIO
+        and _has_multiple_audio_languages(video_info)
+        and not _is_original_audio(selected)
+    ):
+        raise FormatPlanningError(_ORIGINAL_AUDIO_ERROR)
 
     compatible = _is_mp4_compatible(selected)
     if profile is OutputProfile.MP4_COMPATIBLE and not compatible:
@@ -80,6 +108,8 @@ def build_video_plan(
             )
         audio = _choose_audio(video_info, prefer_mp4=True)
         if audio is None or not _is_aac_audio(audio):
+            if _has_multiple_audio_languages(video_info):
+                raise FormatPlanningError(_ORIGINAL_AUDIO_ERROR)
             raise FormatPlanningError(
                 "Não há áudio AAC/M4A compatível para esta qualidade no perfil MP4. "
                 "Escolha Formato original ou Converter para MP4."
@@ -106,6 +136,8 @@ def build_video_plan(
             )
         audio = _choose_audio(video_info, prefer_mp4=True)
         if audio is None or not _is_aac_audio(audio):
+            if _has_multiple_audio_languages(video_info):
+                raise FormatPlanningError(_ORIGINAL_AUDIO_ERROR)
             raise FormatPlanningError("A qualidade escolhida não tem áudio compatível disponível.")
         return _merged_plan(
             selected,
@@ -130,6 +162,8 @@ def build_video_plan(
             )
         audio = _choose_audio(video_info, prefer_mp4=False)
         if audio is None:
+            if _has_multiple_audio_languages(video_info):
+                raise FormatPlanningError(_ORIGINAL_AUDIO_ERROR)
             raise FormatPlanningError("Não há faixa de áudio disponível para esta qualidade.")
         extension = _original_merge_extension(selected, audio)
         return _merged_plan(
@@ -149,6 +183,8 @@ def build_video_plan(
         else:
             audio = _choose_audio(video_info, prefer_mp4=False)
             if audio is None:
+                if _has_multiple_audio_languages(video_info):
+                    raise FormatPlanningError(_ORIGINAL_AUDIO_ERROR)
                 raise FormatPlanningError(
                     "Não há faixa de áudio disponível para converter esta qualidade."
                 )
@@ -207,13 +243,15 @@ def build_audio_plan(
     if not ffmpeg_available:
         raise FormatPlanningError("FFmpeg e FFprobe são necessários para converter mídia.")
     audio = _choose_audio(video_info, prefer_mp4=False)
-    if audio is None:
+    if audio is None and not _has_multiple_audio_languages(video_info):
         audio = max(
             (option for option in video_info.video_options if option.has_audio),
             key=lambda option: option.height or option.tbr or 0,
             default=None,
         )
     if audio is None:
+        if _has_multiple_audio_languages(video_info):
+            raise FormatPlanningError(_ORIGINAL_AUDIO_ERROR)
         raise FormatPlanningError("Nenhuma faixa de áudio compatível foi disponibilizada.")
     return DownloadPlan(
         mode=DownloadMode.MP3,
@@ -331,13 +369,52 @@ def _resolve_choice(video_info: VideoInfo, choice: FormatOption | str) -> Format
     return candidate
 
 
+_ORIGINAL_AUDIO_ERROR = (
+    "Não foi possível identificar a faixa de áudio original. "
+    "O download foi interrompido para evitar usar uma dublagem."
+)
+
+
 def _choose_audio(video_info: VideoInfo, *, prefer_mp4: bool) -> FormatOption | None:
     options = list(video_info.audio_options)
+    original = [option for option in options if _is_original_audio(option)]
+    if original:
+        options = original
+    elif _has_multiple_audio_languages(options):
+        return None
     if prefer_mp4:
         compatible = [option for option in options if _is_aac_audio(option)]
         if compatible:
             options = compatible
-    return max(options, key=lambda option: option.abr or option.tbr or 0, default=None)
+    return max(
+        options,
+        key=lambda option: (
+            option.language_preference if option.language_preference is not None else -1,
+            option.abr or option.tbr or 0,
+        ),
+        default=None,
+    )
+
+
+def _is_original_audio(option: FormatOption) -> bool:
+    note = (option.format_note or "").casefold()
+    return (
+        option.language_preference is not None and option.language_preference >= 10
+    ) or "(original)" in note
+
+
+def _has_multiple_audio_languages(
+    video_info_or_options: VideoInfo | list[FormatOption] | tuple[FormatOption, ...],
+) -> bool:
+    options = (
+        video_info_or_options.formats
+        if isinstance(video_info_or_options, VideoInfo)
+        else video_info_or_options
+    )
+    languages = {
+        option.language for option in options if option.has_audio and option.language
+    }
+    return len(languages) > 1
 
 
 def _is_aac_audio(option: FormatOption) -> bool:
@@ -455,6 +532,8 @@ def _to_option(raw: dict[str, Any]) -> FormatOption | None:
         dynamic_range=_string(raw.get("dynamic_range")),
         format_note=note,
         label=_label(kind, raw),
+        language=_string(raw.get("language")),
+        language_preference=_number(raw.get("language_preference")),
     )
     return option
 
@@ -479,8 +558,17 @@ def _presentation_key(option: FormatOption) -> tuple[Any, ...]:
             _codec_family(option.vcodec),
             option.dynamic_range,
             option.has_audio,
+            option.language if option.has_audio else None,
+            option.language_preference if option.has_audio else None,
         )
-    return ("audio", option.abr, _codec_family(option.acodec), option.ext)
+    return (
+        "audio",
+        option.abr,
+        _codec_family(option.acodec),
+        option.ext,
+        option.language,
+        option.language_preference,
+    )
 
 
 def _quality_key(option: FormatOption) -> tuple[float, ...]:
@@ -575,6 +663,14 @@ def _positive_number(value: Any) -> float | None:
     return (
         float(value)
         if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+        else None
+    )
+
+
+def _number(value: Any) -> float | None:
+    return (
+        float(value)
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
         else None
     )
 

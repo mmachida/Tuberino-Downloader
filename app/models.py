@@ -91,6 +91,8 @@ class FormatOption:
     audio_format_id: str | None = None
     label: str = ""
     available: bool = True
+    language: str | None = None
+    language_preference: float | None = None
 
     def __post_init__(self) -> None:
         if not self.format_id.strip():
