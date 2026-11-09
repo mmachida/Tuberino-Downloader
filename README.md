@@ -1,6 +1,6 @@
 # Tuberino Downloader
 
-![Version](https://img.shields.io/badge/version-v0.8.7-1769aa)
+![Version](https://img.shields.io/github/v/release/mmachida/Tuberino-Downloader?display_name=tag&label=version&color=1769aa)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-0078d4)
 ![License](https://img.shields.io/badge/license-MIT-2ea44f)
 
