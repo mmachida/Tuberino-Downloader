@@ -14,6 +14,8 @@ The interface supports English and Brazilian Portuguese, with Night and Day
 themes. Network, analysis, download and conversion work runs outside the Qt UI
 thread so the window remains responsive.
 
+<img width="998" height="607" alt="image" src="https://github.com/user-attachments/assets/96588cf9-e29c-422e-b1c8-5f8ec10fea6d" />
+
 ## Features
 
 - YouTube videos, multiple individual video URLs and playlists.
